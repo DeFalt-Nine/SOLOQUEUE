@@ -733,7 +733,7 @@ function Navbar({ currentPage, setPage }: { currentPage: Page; setPage: (p: Page
 
 // ─── Home Page ───────────────────────────────────────────────────────────────
 
-function HomePage({ setPage }: { setPage: (p: Page) => void }) {
+function HomePage({ setPage, setSelectedPostId }: { setPage: (p: Page) => void; setSelectedPostId: (id: number) => void }) {
   const stats = [
     { label: "Active Learners", value: "12,847", icon: <Users className="w-4 h-4 text-violet-400" /> },
     { label: "Hackathons Listed", value: "340+", icon: <Trophy className="w-4 h-4 text-cyan-400" /> },
@@ -925,6 +925,7 @@ function HomePage({ setPage }: { setPage: (p: Page) => void }) {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
               className="rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 overflow-hidden transition-colors group cursor-pointer"
+              onClick={() => { setSelectedPostId(post.id); setPage("blog"); }}
             >
               <div className="h-40 bg-violet-900/30 overflow-hidden">
                 <img src={post.image} alt={post.title} className="w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity group-hover:scale-105 transition-transform duration-500" />
@@ -958,19 +959,419 @@ function HomePage({ setPage }: { setPage: (p: Page) => void }) {
 
 // ─── Resources Page ───────────────────────────────────────────────────────────
 
-function ResourcesPage() {
+interface LessonContent {
+  lecture: string;
+  sandboxCode: string;
+  questions: { question: string; options: string[]; answerIndex: number }[];
+}
+
+const LESSON_CONTENTS: Record<number, LessonContent> = {
+  1: {
+    lecture: "Variables are named boxes for your data in Python. In Python, you write 'name = \"Alex\"' to store a string, or 'score = 42' to store an integer. No type declaration needed!\n\nTo loop over numbers, we use range(). For example, 'for i in range(3):' executes its block three times, with 'i' taking values 0, 1, and 2. Indentation is critical in Python—always use 4 spaces!",
+    sandboxCode: "# Python Sandbox!\nname = \"Hacker\"\nprint(f\"Hello, {name}!\")\n\nfor i in range(3):\n    print(f\"Loop count: {i+1}\")",
+    questions: [
+      { question: "How do you declare a variable with name 'xp' and value 500 in Python?", options: ["var xp = 500", "xp = 500", "int xp = 500", "xp : 500"], answerIndex: 1 },
+      { question: "What values will 'i' take in 'for i in range(3):'?", options: ["1, 2, 3", "0, 1, 2", "0, 1, 2, 3", "None of the above"], answerIndex: 1 }
+    ]
+  },
+  2: {
+    lecture: "Git lets you track and manage your code's history. Think of Git as a tree where 'main' is the trunk. When you want to work on a feature, you create a branch. This keeps the main trunk stable while you experiment.\n\nKey commands:\n- 'git branch branch-name' creates a branch.\n- 'git checkout branch-name' switches to it.\n- 'git add .' stages your edits.\n- 'git commit -m \"msg\"' commits them.",
+    sandboxCode: "# Git master simulation\ncommit_msg = \"feat: initialize app\"\nprint(\"Staging modified files...\")\nprint(f\"Commit snapshot created: {commit_msg}\")\nprint(\"Branch 'main' pushed to GitHub!\")",
+    questions: [
+      { question: "Which Git command stages all modified files?", options: ["git commit", "git push", "git add .", "git checkout"], answerIndex: 2 },
+      { question: "How do you create and switch to a new branch 'dev' in one step?", options: ["git branch dev", "git checkout dev", "git checkout -b dev", "git merge dev"], answerIndex: 2 }
+    ]
+  },
+  3: {
+    lecture: "Scoping is the single most important skill for a hackathon. With only 36 hours, you must build an MVP (Minimum Viable Product). Don't try to build a massive project with 10 broken features; build ONE feature that works perfectly.\n\nWhen presenting to judges, spend the last 4 hours on your pitch and slides. A beautiful working demo with a clear explanation wins hackathons!",
+    sandboxCode: "# Hackathon timing planner\nhours_left = 36\nif hours_left > 12:\n    print(\"Build the MVP core!\")\nelif hours_left > 4:\n    print(\"Feature freeze. Test and polish!\")\nelse:\n    print(\"Design slides and practice your pitch!\")",
+    questions: [
+      { question: "What is the key factor in building a winning hackathon project?", options: ["Using advanced machine learning", "Scoping a clean, fully-functional MVP", "Writing as many lines of code as possible", "Working completely solo"], answerIndex: 1 },
+      { question: "How much time should you devote to your presentation and slides?", options: ["10 minutes at the very end", "The final 3 to 4 hours of the hackathon", "None, judges only look at code", "The first 5 hours of the hackathon"], answerIndex: 1 }
+    ]
+  },
+  4: {
+    lecture: "UI/UX Design starts with visual hierarchy. Use contrasting sizes, font weights, and negative space to guide the user's focus.\n\nAlways design with the 'Less is More' principle. Negative space (white space) isn't empty space; it gives your elements room to breathe and makes your interface feel luxurious, legible, and highly premium.",
+    sandboxCode: "# Layout style simulator\npadding_desktop = \"px-10 py-8\"\npadding_mobile = \"px-4 py-3\"\nprint(f\"Applied screen spacing: {padding_desktop} (desktop)\")",
+    questions: [
+      { question: "What is the primary benefit of negative space?", options: ["It wastes valuable screen real estate", "It guides focus and gives elements breathing room", "It makes elements look smaller", "It reduces design fidelity"], answerIndex: 1 },
+      { question: "Which property is NOT a tool for visual hierarchy?", options: ["Font Weight", "Element Size", "Using random background colors everywhere", "Intentional Padding"], answerIndex: 2 }
+    ]
+  }
+};
+
+function ResourceLessonViewer({
+  resource,
+  onBack,
+  gainXp,
+  onComplete
+}: {
+  resource: Resource;
+  onBack: () => void;
+  gainXp: (amount: number) => void;
+  onComplete: (id: number) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"learn" | "sandbox" | "quiz">("learn");
+  const [code, setCode] = useState("");
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizCorrect, setQuizCorrect] = useState(false);
+  const [particles, setParticles] = useState<{ id: number; x: number; y: number; color: string }[]>([]);
+
+  const defaultContent: LessonContent = {
+    lecture: `Welcome to the lesson on "${resource.title}". This course covers essential concepts in ${resource.category}. Rapid development, debugging, and testing are key skills in modern full-stack developer environments.\n\nRead through the material, test code in the Sandbox terminal, and ace the conceptual quiz to earn your ${resource.xp} XP and unlock higher tier courses!`,
+    sandboxCode: `# Welcome to the Sandbox!\nprint("Running environment: SoloQueue Engine v2.0")\nprint("Current Module: ${resource.title}")`,
+    questions: [
+      { question: `What is the core focus of "${resource.title}"?`, options: [`The advanced mechanics of ${resource.category}`, `How to build a basic application`, `Testing and deployment`, "None of the above"], answerIndex: 0 },
+      { question: "Why is rapid prototyping important in hackathons?", options: ["To write flawless code", "To test business value with minimal engineering lag", "To write longer documentation", "To bypass team building"], answerIndex: 1 }
+    ]
+  };
+
+  const content = LESSON_CONTENTS[resource.id] || defaultContent;
+
+  useEffect(() => {
+    setCode(content.sandboxCode);
+    setTerminalLogs([`$ initialized sandbox: ${resource.title}`]);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizCorrect(false);
+    setActiveTab("learn");
+  }, [resource.id]);
+
+  const triggerParticles = () => {
+    const colors = ["#8b5cf6", "#06b6d4", "#3b82f6", "#10b981", "#f59e0b", "#ec4899"];
+    const pts = Array.from({ length: 40 }).map((_, i) => ({
+      id: i,
+      x: Math.random() * 300 - 150,
+      y: Math.random() * -200 - 50,
+      color: colors[Math.floor(Math.random() * colors.length)]
+    }));
+    setParticles(pts);
+    setTimeout(() => setParticles([]), 2000);
+  };
+
+  const runCode = () => {
+    setIsRunning(true);
+    setTerminalLogs(prev => [...prev, ">> Compiling container..."]);
+    setTimeout(() => {
+      const logs = ["$ python sandbox.py", ">> Launching isolated instance..."];
+      const lines = code.split("\n");
+      let prints = 0;
+      lines.forEach(l => {
+        const t = l.trim();
+        if (t.startsWith("print(") && t.endsWith(")")) {
+          prints++;
+          let inner = t.slice(6, -1);
+          if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+            inner = inner.slice(1, -1);
+          }
+          if (inner.startsWith('f"') || inner.startsWith("f'")) {
+            inner = inner.slice(2, -1);
+            inner = inner.replace(/{name}/g, "Alex").replace(/{hours_left}/g, "36");
+          }
+          logs.push(inner);
+        }
+      });
+      if (prints === 0) {
+        logs.push(">> Script finished. (Tip: Try print('Hello World') to see outputs here!)");
+      } else {
+        logs.push(">> Exit code 0 (Success)");
+      }
+      setTerminalLogs(logs);
+      setIsRunning(false);
+    }, 800);
+  };
+
+  const handleQuizSubmit = () => {
+    const isAllCorrect = content.questions.every((q, i) => quizAnswers[i] === q.answerIndex);
+    setQuizSubmitted(true);
+    setQuizCorrect(isAllCorrect);
+
+    if (isAllCorrect) {
+      triggerParticles();
+      gainXp(resource.xp);
+      onComplete(resource.id);
+    }
+  };
+
+  return (
+    <div className="relative min-h-[85vh] flex flex-col pt-4">
+      {/* Particle Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
+        {particles.map(p => (
+          <motion.div
+            key={p.id}
+            initial={{ opacity: 1, x: "50vw", y: "40vh", scale: 1.5 }}
+            animate={{ opacity: 0, x: `calc(50vw + ${p.x}px)`, y: `calc(40vh + ${p.y}px)`, scale: 0.2, rotate: 360 }}
+            transition={{ duration: 1.8, ease: "easeOut" }}
+            className="absolute w-3 h-3 rounded-full shadow-lg"
+            style={{ backgroundColor: p.color, boxShadow: `0 0 10px ${p.color}` }}
+          />
+        ))}
+      </div>
+
+      {/* Lesson Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge text={resource.category} color="purple" />
+              <span className="text-xs text-yellow-400 font-bold flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />+{resource.xp} XP
+              </span>
+            </div>
+            <h1 className="text-2xl font-bold text-white leading-tight">{resource.title}</h1>
+          </div>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 shrink-0 self-start sm:self-center">
+          {(["learn", "sandbox", "quiz"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
+                activeTab === tab
+                  ? "bg-violet-600 text-white shadow-lg shadow-violet-500/20"
+                  : "text-white/40 hover:text-white/80"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Container */}
+      <div className="flex-1 grid lg:grid-cols-12 gap-6 items-stretch">
+        {/* Left Column (Material / Questions) */}
+        <div className="lg:col-span-7 flex flex-col">
+          {activeTab === "learn" && (
+            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex-1 space-y-5">
+              <GlassCard className="p-6 h-full flex flex-col justify-between" glowColor="purple">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-2">
+                    <BookOpen className="w-4 h-4 text-violet-400" /> Lesson Material
+                  </h3>
+                  <p className="text-white/75 text-sm leading-relaxed whitespace-pre-wrap font-sans">
+                    {content.lecture}
+                  </p>
+                </div>
+
+                {/* Mentor Tip Box */}
+                <div className="mt-8 p-4 rounded-xl bg-violet-900/10 border border-violet-500/20 flex items-start gap-3">
+                  <div className="w-10 h-10 shrink-0 mt-0.5 rounded-lg overflow-hidden border border-violet-400/30">
+                    <CharacterPortrait char="kai" size={40} />
+                  </div>
+                  <div>
+                    <h5 className="text-xs font-mono font-bold text-violet-300">KAI • CODE MENTOR</h5>
+                    <p className="text-xs text-white/60 leading-relaxed mt-0.5">
+                      "Make sure to test these theories on the Sandbox tab! Type out some custom print statements and see how they compile live in our simulated environment."
+                    </p>
+                  </div>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {activeTab === "sandbox" && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col space-y-4">
+              <GlassCard className="p-5 flex-1 flex flex-col" glowColor="cyan">
+                <h3 className="text-sm font-mono text-cyan-400 mb-3 uppercase tracking-widest flex items-center gap-2">
+                  <Terminal className="w-4 h-4" /> Code Playground editor.py
+                </h3>
+                <textarea
+                  value={code}
+                  onChange={e => setCode(e.target.value)}
+                  spellCheck={false}
+                  className="flex-1 w-full bg-[#08080f] p-4 rounded-xl border border-white/5 text-cyan-200/90 font-mono text-sm leading-relaxed focus:outline-none focus:border-cyan-500/30 min-h-[220px] resize-none"
+                />
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/5">
+                  <p className="text-xs text-white/30 font-mono">Simulated execution compiler ready.</p>
+                  <button
+                    onClick={runCode}
+                    disabled={isRunning}
+                    className="flex items-center gap-2 px-6 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/10 disabled:opacity-40 transition-all"
+                  >
+                    {isRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    Run Script
+                  </button>
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+
+          {activeTab === "quiz" && (
+            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="flex-1">
+              <GlassCard className="p-6 h-full flex flex-col justify-between" glowColor="purple">
+                <div className="space-y-6">
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-2">
+                    <Award className="w-4 h-4 text-violet-400" /> Course Knowledge Check
+                  </h3>
+
+                  {content.questions.map((q, qIdx) => (
+                    <div key={qIdx} className="space-y-2.5">
+                      <p className="text-sm font-semibold text-white/90">
+                        {qIdx + 1}. {q.question}
+                      </p>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        {q.options.map((opt, optIdx) => {
+                          const selected = quizAnswers[qIdx] === optIdx;
+                          return (
+                            <button
+                              key={optIdx}
+                              disabled={quizSubmitted && quizCorrect}
+                              onClick={() => setQuizAnswers(prev => ({ ...prev, [qIdx]: optIdx }))}
+                              className={`p-3 rounded-xl text-left text-xs font-semibold border transition-all ${
+                                selected
+                                  ? "bg-violet-600/20 border-violet-400 text-violet-200"
+                                  : "bg-white/[0.02] border-white/10 text-white/60 hover:border-white/20 hover:bg-white/[0.04]"
+                              }`}
+                            >
+                              <span className="text-violet-400 mr-2">{String.fromCharCode(65 + optIdx)}.</span>
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-8 pt-4 border-t border-white/5">
+                  {quizSubmitted ? (
+                    <div className={`p-4 rounded-xl border text-center ${
+                      quizCorrect
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                        : "bg-red-500/15 border-red-500/30 text-red-300"
+                    }`}>
+                      <h4 className="font-bold text-sm mb-1">
+                        {quizCorrect ? "🎉 Challenge Passed!" : "🤔 Try Again!"}
+                      </h4>
+                      <p className="text-xs opacity-80">
+                        {quizCorrect
+                          ? `Superb job! You answered all questions correctly, gained +${resource.xp} XP and unlocked the next class!`
+                          : "Some questions were answered incorrectly. Review the material and re-try!"}
+                      </p>
+                      {!quizCorrect && (
+                        <button
+                          onClick={() => { setQuizSubmitted(false); setQuizAnswers({}); }}
+                          className="mt-3 px-4 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-xs font-semibold border border-red-500/30 transition-colors"
+                        >
+                          Retry Quiz
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleQuizSubmit}
+                      disabled={Object.keys(quizAnswers).length < content.questions.length}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all text-center"
+                    >
+                      Submit Answers
+                    </button>
+                  )}
+                </div>
+              </GlassCard>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Right Column (Live Terminal / Sandbox Log output) */}
+        <div className="lg:col-span-5 flex flex-col">
+          <GlassCard className="p-4 flex-1 flex flex-col bg-[#050508]/85 border-white/5 min-h-[220px]" glowColor="none">
+            <div className="flex items-center justify-between pb-2 border-b border-white/5 mb-3">
+              <span className="text-xs font-mono text-white/40 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sandbox Console
+              </span>
+              <button
+                onClick={() => setTerminalLogs([])}
+                className="text-[10px] font-mono text-white/30 hover:text-white/60 uppercase"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="flex-1 font-mono text-xs text-cyan-300/80 p-3 bg-black/50 rounded-lg overflow-y-auto space-y-1.5 max-h-[400px]">
+              {terminalLogs.map((log, index) => (
+                <div key={index} className="leading-relaxed whitespace-pre-wrap">
+                  {log}
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResourcesPage({
+  resourcesList,
+  setResourcesList,
+  selectedResourceId,
+  setSelectedResourceId,
+  gainXp,
+  xp,
+  level
+}: {
+  resourcesList: Resource[];
+  setResourcesList: React.Dispatch<React.SetStateAction<Resource[]>>;
+  selectedResourceId: number | null;
+  setSelectedResourceId: (id: number | null) => void;
+  gainXp: (amount: number) => void;
+  xp: number;
+  level: number;
+}) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const categories = ["All", "Programming", "Git/GitHub", "Hackathons", "UI/UX", "Teamwork", "Planning", "Interview"];
 
-  const filtered = RESOURCES.filter(r => {
+  const filtered = resourcesList.filter(r => {
     const matchCat = activeCategory === "All" || r.category === activeCategory;
     const matchSearch = r.title.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
-  const totalXP = RESOURCES.filter(r => r.progress === 100).reduce((sum, r) => sum + r.xp, 0);
-  const completed = RESOURCES.filter(r => r.progress === 100).length;
+  const totalXP = resourcesList.filter(r => r.progress === 100).reduce((sum, r) => sum + r.xp, 0);
+  const completed = resourcesList.filter(r => r.progress === 100).length;
+
+  const handleLessonComplete = (id: number) => {
+    setResourcesList(prev => {
+      return prev.map((r, idx) => {
+        if (r.id === id) {
+          return { ...r, progress: 100 };
+        }
+        // Unlock next resource!
+        if (idx > 0 && prev[idx - 1].id === id) {
+          return { ...r, locked: false };
+        }
+        return r;
+      });
+    });
+  };
+
+  const selectedResource = resourcesList.find(r => r.id === selectedResourceId);
+
+  if (selectedResourceId && selectedResource) {
+    return (
+      <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
+        <ResourceLessonViewer
+          resource={selectedResource}
+          onBack={() => setSelectedResourceId(null)}
+          gainXp={gainXp}
+          onComplete={handleLessonComplete}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
@@ -984,10 +1385,10 @@ function ResourcesPage() {
         {/* Progress summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: "Completed", value: `${completed}/${RESOURCES.length}`, icon: <CheckCircle className="w-5 h-5 text-emerald-400" /> },
-            { label: "XP Earned", value: `${totalXP.toLocaleString()}`, icon: <Zap className="w-5 h-5 text-yellow-400" /> },
-            { label: "In Progress", value: `${RESOURCES.filter(r => r.progress > 0 && r.progress < 100).length}`, icon: <TrendingUp className="w-5 h-5 text-blue-400" /> },
-            { label: "Locked", value: `${RESOURCES.filter(r => r.locked).length}`, icon: <Lock className="w-5 h-5 text-white/30" /> },
+            { label: "Completed", value: `${completed}/${resourcesList.length}`, icon: <CheckCircle className="w-5 h-5 text-emerald-400" /> },
+            { label: "XP Earned", value: `${xp.toLocaleString()}`, icon: <Zap className="w-5 h-5 text-yellow-400" /> },
+            { label: "In Progress", value: `${resourcesList.filter(r => r.progress > 0 && r.progress < 100).length}`, icon: <TrendingUp className="w-5 h-5 text-blue-400" /> },
+            { label: "Locked", value: `${resourcesList.filter(r => r.locked).length}`, icon: <Lock className="w-5 h-5 text-white/30" /> },
           ].map((s, i) => (
             <GlassCard key={i} className="p-4 flex items-center gap-3">
               {s.icon}
@@ -1038,6 +1439,7 @@ function ResourcesPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
+              onClick={() => { if (!r.locked) setSelectedResourceId(r.id); }}
               className={`group p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden ${
                 r.locked
                   ? "bg-white/[0.01] border-white/5 opacity-60"
@@ -1078,10 +1480,112 @@ function ResourcesPage() {
 
 // ─── Hackathons Page ──────────────────────────────────────────────────────────
 
-function HackathonsPage() {
+function CyberTicket({ hackathon }: { hackathon: Hackathon }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-950/20 to-black/80 backdrop-blur-xl shadow-2xl p-6"
+    >
+      {/* Laser glow lines */}
+      <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-violet-400 to-transparent animate-pulse" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(139,92,246,0.1),transparent_40%)]" />
+
+      {/* Perforation line */}
+      <div className="absolute right-24 top-0 bottom-0 border-r border-dashed border-white/10 flex flex-col justify-between py-2 z-10">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <div key={i} className="w-1 h-1 rounded-full bg-black/60 -mr-0.5" />
+        ))}
+      </div>
+
+      <div className="flex gap-4">
+        {/* Ticket Left Part */}
+        <div className="flex-1 pr-2">
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+            <span className="text-[10px] font-mono tracking-widest text-emerald-400 font-bold uppercase">SECURE PASS GRANTED</span>
+          </div>
+
+          <h4 className="text-xl font-black text-white tracking-tight line-clamp-1">{hackathon.name}</h4>
+          <p className="text-xs text-white/50 mb-5 font-mono">{hackathon.location.toUpperCase()}</p>
+
+          <div className="grid grid-cols-2 gap-y-3 gap-x-2 border-t border-white/5 pt-4 mb-2">
+            <div>
+              <p className="text-[9px] font-mono text-white/40 uppercase">Challenger ID</p>
+              <p className="text-xs font-mono font-bold text-violet-300">SQ-HACK-4927</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-mono text-white/40 uppercase">Assigned Seat</p>
+              <p className="text-xs font-mono font-bold text-violet-300">SEAT-D18</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-mono text-white/40 uppercase">Date/Time</p>
+              <p className="text-xs font-mono text-white/70 leading-tight">{hackathon.date}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-mono text-white/40 uppercase">Admission Code</p>
+              <p className="text-xs font-mono text-white/70">SQ_PASS_OK</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Ticket Right Part (Stub) */}
+        <div className="w-16 flex flex-col items-center justify-center shrink-0">
+          {/* QR Code Graphic */}
+          <div className="w-14 h-14 bg-white/5 border border-white/10 rounded-lg p-1.5 flex flex-wrap gap-[2px] items-center justify-center">
+            {Array.from({ length: 49 }).map((_, i) => (
+              <div
+                key={i}
+                className={`w-[5px] h-[5px] rounded-[1px] ${
+                  (i % 3 === 0 && i % 2 === 0) || i < 8 || i > 40 || (i % 7 === 1)
+                    ? "bg-violet-400"
+                    : "bg-transparent"
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-[8px] font-mono text-white/30 uppercase mt-2 text-center tracking-tighter leading-none">SCAN AT GATE</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function HackathonsPage({
+  registered,
+  setRegistered,
+  selectedHackathonId,
+  setSelectedHackathonId,
+  registrationDetails,
+  setRegistrationDetails,
+  hackathonTeams,
+  setHackathonTeams,
+  gainXp
+}: {
+  registered: Set<number>;
+  setRegistered: React.Dispatch<React.SetStateAction<Set<number>>>;
+  selectedHackathonId: number | null;
+  setSelectedHackathonId: (id: number | null) => void;
+  registrationDetails: Record<number, { role: string; portfolio: string; track: string }>;
+  setRegistrationDetails: React.Dispatch<React.SetStateAction<Record<number, { role: string; portfolio: string; track: string }>>>;
+  hackathonTeams: Record<number, { id: number; name: string; track: string; size: number; capacity: number; description: string; creator: string; applied?: boolean }[]>;
+  setHackathonTeams: React.Dispatch<React.SetStateAction<Record<number, { id: number; name: string; track: string; size: number; capacity: number; description: string; creator: string; applied?: boolean }[]>>>;
+  gainXp: (amount: number) => void;
+}) {
   const [filter, setFilter] = useState<"all" | "online" | "in-person" | "hybrid">("all");
   const [diffFilter, setDiffFilter] = useState<"All" | "Beginner" | "Intermediate" | "Advanced">("All");
-  const [registered, setRegistered] = useState<Set<number>>(new Set([1]));
+
+  // Registration Form Local States
+  const [role, setRole] = useState("Full Stack Developer");
+  const [portfolio, setPortfolio] = useState("");
+  const [track, setTrack] = useState("Web3 & AI Integration");
+  const [showRegForm, setShowRegForm] = useState(false);
+
+  // New Team Form Local States
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [newTeamDesc, setNewTeamDesc] = useState("");
+  const [newTeamTrack, setNewTeamTrack] = useState("General Track");
 
   const filtered = HACKATHONS.filter(h => {
     const matchType = filter === "all" || h.type === filter;
@@ -1095,6 +1599,354 @@ function HackathonsPage() {
   const typeColors: Record<string, "cyan" | "orange" | "pink"> = {
     online: "cyan", "in-person": "orange", hybrid: "pink"
   };
+
+  const selectedHackathon = HACKATHONS.find(h => h.id === selectedHackathonId);
+
+  const handleRegister = (hId: number) => {
+    setRegistered(prev => {
+      const next = new Set(prev);
+      next.add(hId);
+      return next;
+    });
+    setRegistrationDetails(prev => ({
+      ...prev,
+      [hId]: { role, portfolio, track }
+    }));
+    gainXp(100);
+    setShowRegForm(false);
+  };
+
+  const handleUnregister = (hId: number) => {
+    setRegistered(prev => {
+      const next = new Set(prev);
+      next.delete(hId);
+      return next;
+    });
+    setRegistrationDetails(prev => {
+      const next = { ...prev };
+      delete next[hId];
+      return next;
+    });
+  };
+
+  const handleApplyToTeam = (hId: number, teamId: number) => {
+    setHackathonTeams(prev => {
+      const list = prev[hId] || [];
+      return {
+        ...prev,
+        [hId]: list.map(t => t.id === teamId ? { ...t, applied: true, size: t.size + 1 } : t)
+      };
+    });
+    gainXp(30);
+  };
+
+  const handleCreateTeam = (hId: number) => {
+    if (!newTeamName.trim() || !newTeamDesc.trim()) return;
+    const newTeam = {
+      id: Date.now(),
+      name: newTeamName,
+      track: newTeamTrack,
+      size: 1,
+      capacity: 4,
+      description: newTeamDesc,
+      creator: "You (SoloQueue Hacker)",
+      applied: false
+    };
+
+    setHackathonTeams(prev => ({
+      ...prev,
+      [hId]: [newTeam, ...(prev[hId] || [])]
+    }));
+
+    setNewTeamName("");
+    setNewTeamDesc("");
+    setShowCreateTeam(false);
+    gainXp(50);
+  };
+
+  // Render Single Hackathon Detail View
+  if (selectedHackathonId && selectedHackathon) {
+    const isReg = registered.has(selectedHackathon.id);
+    const regInfo = registrationDetails[selectedHackathon.id];
+    const teams = hackathonTeams[selectedHackathon.id] || [];
+
+    return (
+      <div className="pt-24 pb-16 max-w-5xl mx-auto px-6">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => { setSelectedHackathonId(null); setShowRegForm(false); setShowCreateTeam(false); }}
+            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <span className="text-xs text-violet-400 font-mono font-bold tracking-widest uppercase">HACKATHON DETAILS</span>
+            <h1 className="text-3xl font-extrabold text-white leading-tight mt-0.5">{selectedHackathon.name}</h1>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-12 gap-8 items-start">
+          {/* Left Main Panels */}
+          <div className="lg:col-span-7 space-y-6">
+            <GlassCard className="p-6" glowColor="purple">
+              <div className="flex gap-2 flex-wrap mb-4">
+                <Badge text={selectedHackathon.difficulty} color={diffColors[selectedHackathon.difficulty]} />
+                <Badge text={selectedHackathon.type} color={typeColors[selectedHackathon.type]} />
+              </div>
+
+              <h3 className="text-lg font-bold text-white mb-3">Event Overview</h3>
+              <p className="text-sm text-white/70 leading-relaxed font-sans">
+                {selectedHackathon.name} is the premiere developer playground bringing together students, hackers, and mentors. Build a project from scratch over an intense weekend, present your MVP to industry expert judges, and compete for part of the massive <span className="text-yellow-400 font-bold">{selectedHackathon.prize}</span> prize pool!
+              </p>
+
+              <div className="grid sm:grid-cols-2 gap-4 mt-6 pt-6 border-t border-white/5">
+                <div className="flex gap-3 items-center">
+                  <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center text-violet-400">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-mono text-white/40 uppercase">SCHEDULE</p>
+                    <p className="text-sm text-white/80 font-semibold">{selectedHackathon.date}</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 items-center">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400">
+                    <MapPin className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-mono text-white/40 uppercase">LOCATION</p>
+                    <p className="text-sm text-white/80 font-semibold">{selectedHackathon.location}</p>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* Team Finder Module */}
+            <GlassCard className="p-6" glowColor="cyan">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-cyan-400" /> Team Finder Board
+                  </h3>
+                  <p className="text-xs text-white/40 mt-0.5">Connect with other challengers to build together</p>
+                </div>
+                {isReg && !showCreateTeam && (
+                  <button
+                    onClick={() => setShowCreateTeam(true)}
+                    className="px-4 py-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30 hover:bg-cyan-500/30 text-cyan-200 text-xs font-semibold transition-colors"
+                  >
+                    Create a Team
+                  </button>
+                )}
+              </div>
+
+              {showCreateTeam && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mb-6 p-4 rounded-xl bg-white/[0.02] border border-cyan-500/20 space-y-3"
+                >
+                  <h4 className="text-sm font-bold text-white">Create New Hackathon Team</h4>
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[10px] text-white/40 uppercase font-mono block mb-1">Team Name</label>
+                      <input
+                        type="text"
+                        value={newTeamName}
+                        onChange={e => setNewTeamName(e.target.value)}
+                        placeholder="e.g. ByteBusters"
+                        className="w-full bg-[#08080f] border border-white/10 px-3 py-2 rounded-lg text-xs text-white focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-white/40 uppercase font-mono block mb-1">Target Track</label>
+                      <select
+                        value={newTeamTrack}
+                        onChange={e => setNewTeamTrack(e.target.value)}
+                        className="w-full bg-[#08080f] border border-white/10 px-3 py-2 rounded-lg text-xs text-white focus:outline-none focus:border-cyan-500"
+                      >
+                        <option>General Track</option>
+                        <option>Artificial Intelligence</option>
+                        <option>UI/UX Design Focus</option>
+                        <option>Web3 Sandbox</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-white/40 uppercase font-mono block mb-1">Project Idea & Required Roles</label>
+                      <textarea
+                        value={newTeamDesc}
+                        onChange={e => setNewTeamDesc(e.target.value)}
+                        placeholder="Describe what you plan to build and who you are looking to recruit..."
+                        className="w-full bg-[#08080f] border border-white/10 px-3 py-2 rounded-lg text-xs text-white focus:outline-none focus:border-cyan-500 h-20 resize-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      onClick={() => setShowCreateTeam(false)}
+                      className="px-3 py-1.5 text-xs font-semibold text-white/50 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleCreateTeam(selectedHackathon.id)}
+                      className="px-4 py-1.5 bg-cyan-600 text-white font-semibold text-xs rounded-lg hover:bg-cyan-500"
+                    >
+                      Publish Team
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Team list cards */}
+              <div className="space-y-3">
+                {teams.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-white/5 rounded-xl">
+                    <p className="text-xs text-white/40">No teams registered yet. Be the first to start a team!</p>
+                  </div>
+                ) : (
+                  teams.map(t => (
+                    <div key={t.id} className="p-4 rounded-xl bg-white/[0.01] border border-white/5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:border-white/10 transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h5 className="text-sm font-bold text-white">{t.name}</h5>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 font-mono">
+                            {t.track}
+                          </span>
+                        </div>
+                        <p className="text-xs text-white/50 leading-relaxed">{t.description}</p>
+                        <p className="text-[10px] font-mono text-white/30">Created by: {t.creator}</p>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-end sm:self-center">
+                        <span className="text-xs font-mono text-white/40">{t.size}/{t.capacity} members</span>
+                        {t.applied ? (
+                          <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle className="w-3.5 h-3.5" /> Applied
+                          </span>
+                        ) : (
+                          <button
+                            disabled={!isReg}
+                            onClick={() => handleApplyToTeam(selectedHackathon.id, t.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                              isReg
+                                ? "bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/20"
+                                : "bg-white/5 text-white/20 cursor-not-allowed border border-white/5"
+                            }`}
+                          >
+                            Join Team
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </GlassCard>
+          </div>
+
+          {/* Right Action / Ticket Column */}
+          <div className="lg:col-span-5 space-y-6">
+            {isReg ? (
+              <div className="space-y-4">
+                <h3 className="text-xs font-mono tracking-widest text-white/40 uppercase">Your Admission Pass</h3>
+                <CyberTicket hackathon={selectedHackathon} />
+
+                <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+                  <h4 className="text-xs font-bold font-mono text-white/70 uppercase">Registration Credentials</h4>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-white/30 block">Assigned Track</span>
+                      <span className="text-white/80 font-semibold">{regInfo?.track || "General Track"}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/30 block">Team Role</span>
+                      <span className="text-white/80 font-semibold">{regInfo?.role || "Full Stack Developer"}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleUnregister(selectedHackathon.id)}
+                    className="w-full mt-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-semibold transition-colors"
+                  >
+                    Cancel Registration
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <GlassCard className="p-6 text-center" glowColor="none">
+                  <Lock className="w-8 h-8 text-white/30 mx-auto mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">Registration Pending</h3>
+                  <p className="text-xs text-white/50 mb-5 leading-relaxed">
+                    Complete the basic application profile to secure your seat and download your holographic ticket pass.
+                  </p>
+
+                  {!showRegForm ? (
+                    <button
+                      onClick={() => setShowRegForm(true)}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/20"
+                    >
+                      Open Registration Form
+                    </button>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="text-left space-y-4 pt-4 border-t border-white/5"
+                    >
+                      <div>
+                        <label className="text-[10px] text-white/40 font-mono uppercase block mb-1">Select Hackathon Track</label>
+                        <select
+                          value={track}
+                          onChange={e => setTrack(e.target.value)}
+                          className="w-full bg-[#08080f] border border-white/10 px-3 py-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500"
+                        >
+                          <option>Web3 & AI Integration</option>
+                          <option>Full-Stack SaaS MVP</option>
+                          <option>Green Tech & Carbon Offsets</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-white/40 font-mono uppercase block mb-1">Desired Team Role</label>
+                        <select
+                          value={role}
+                          onChange={e => setRole(e.target.value)}
+                          className="w-full bg-[#08080f] border border-white/10 px-3 py-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500"
+                        >
+                          <option>Full Stack Developer</option>
+                          <option>Frontend Engineer</option>
+                          <option>Backend Architect</option>
+                          <option>Product & Pitch lead</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-white/40 font-mono uppercase block mb-1">GitHub / Portfolio Link</label>
+                        <input
+                          type="text"
+                          value={portfolio}
+                          onChange={e => setPortfolio(e.target.value)}
+                          placeholder="https://github.com/..."
+                          className="w-full bg-[#08080f] border border-white/10 px-3 py-2.5 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => handleRegister(selectedHackathon.id)}
+                        className="w-full mt-2 py-3 bg-violet-600 hover:bg-violet-500 rounded-xl font-bold text-white text-xs uppercase tracking-wider transition-colors"
+                      >
+                        Submit & Claim Ticket
+                      </button>
+                    </motion.div>
+                  )}
+                </GlassCard>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
@@ -1142,7 +1994,8 @@ function HackathonsPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07 }}
-              className="group p-5 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-violet-500/30 transition-all hover:shadow-lg hover:shadow-violet-500/10"
+              onClick={() => setSelectedHackathonId(h.id)}
+              className="group p-5 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-violet-500/30 transition-all hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex gap-2 flex-wrap">
@@ -1156,7 +2009,7 @@ function HackathonsPage() {
                 )}
               </div>
 
-              <h3 className="text-lg font-bold text-white mb-3">{h.name}</h3>
+              <h3 className="text-lg font-bold text-white mb-3 group-hover:text-violet-300 transition-colors">{h.name}</h3>
 
               <div className="space-y-1.5 mb-4">
                 <div className="flex items-center gap-2 text-sm text-white/50">
@@ -1182,18 +2035,13 @@ function HackathonsPage() {
               </div>
 
               <button
-                onClick={() => setRegistered(prev => {
-                  const next = new Set(prev);
-                  if (next.has(h.id)) next.delete(h.id); else next.add(h.id);
-                  return next;
-                })}
                 className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-all ${
                   registered.has(h.id)
-                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-red-500/15 hover:text-red-300 hover:border-red-500/30"
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                     : "bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white shadow-md shadow-violet-500/20"
                 }`}
               >
-                {registered.has(h.id) ? "✓ Registered — Click to Unregister" : "Register Now"}
+                {registered.has(h.id) ? "✓ Ticket Claimed — Open Pass" : "View Details & Register"}
               </button>
             </motion.div>
           ))}
@@ -1205,10 +2053,19 @@ function HackathonsPage() {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
-function ProfilePage() {
-  const level = 12;
-  const xp = 3850;
-  const xpToNext = 4500;
+function ProfilePage({
+  level,
+  xp,
+  xpToNext,
+  resourcesList,
+  registered
+}: {
+  level: number;
+  xp: number;
+  xpToNext: number;
+  resourcesList: Resource[];
+  registered: Set<number>;
+}) {
   const rarityColors: Record<string, string> = {
     common: "text-white/60 border-white/20 bg-white/5",
     uncommon: "text-emerald-300 border-emerald-500/30 bg-emerald-500/10",
@@ -1216,6 +2073,19 @@ function ProfilePage() {
     epic: "text-violet-300 border-violet-500/30 bg-violet-500/10",
     legendary: "text-yellow-300 border-yellow-500/30 bg-yellow-500/10"
   };
+
+  const completedLessonsCount = resourcesList.filter(r => r.progress === 100).length;
+  const registeredHackathonsCount = registered.size;
+
+  // Dynamically mark achievements as earned
+  const dynamicAchievements = ACHIEVEMENTS.map(a => {
+    let earned = a.earned;
+    if (a.id === 1 && completedLessonsCount >= 1) earned = true;
+    if (a.id === 2 && registeredHackathonsCount >= 1) earned = true;
+    if (a.id === 3 && xp >= 1000) earned = true;
+    if (a.id === 4 && completedLessonsCount >= 3) earned = true;
+    return { ...a, earned };
+  });
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
@@ -1235,7 +2105,7 @@ function ProfilePage() {
                 </div>
                 <h2 className="text-xl font-bold text-white">Alex Kim</h2>
                 <p className="text-sm text-white/40 mb-1">@alexkim_dev</p>
-                <Badge text="Code Apprentice" color="purple" />
+                <Badge text={level >= 5 ? "Hackathon Hero" : "Code Apprentice"} color="purple" />
                 <div className="mt-4 w-full">
                   <div className="flex justify-between text-xs text-white/40 mb-1">
                     <span>Level {level}</span>
@@ -1248,18 +2118,18 @@ function ProfilePage() {
 
             {/* Stats */}
             <GlassCard className="p-5">
-              <h3 className="font-semibold text-white mb-4">Your Stats</h3>
-              <div className="space-y-3">
+              <h3 className="font-semibold text-white mb-4 font-mono uppercase tracking-wider text-xs">Challenger Stats</h3>
+              <div className="space-y-4">
                 {[
-                  { label: "Lessons Completed", value: "23", icon: <BookOpen className="w-4 h-4 text-violet-400" />, bar: 46 },
-                  { label: "Hackathons Registered", value: "1", icon: <Trophy className="w-4 h-4 text-yellow-400" />, bar: 33 },
-                  { label: "Blog Posts Read", value: "14", icon: <Newspaper className="w-4 h-4 text-blue-400" />, bar: 70 },
-                  { label: "Days Streak", value: "7", icon: <Flame className="w-4 h-4 text-orange-400" />, bar: 100 },
+                  { label: "Lessons Completed", value: `${completedLessonsCount}/${resourcesList.length}`, icon: <BookOpen className="w-4 h-4 text-violet-400" />, bar: (completedLessonsCount / resourcesList.length) * 100 },
+                  { label: "Hackathons Registered", value: `${registeredHackathonsCount}`, icon: <Trophy className="w-4 h-4 text-yellow-400" />, bar: registeredHackathonsCount > 0 ? 100 : 0 },
+                  { label: "Blog Posts Read", value: "3", icon: <Newspaper className="w-4 h-4 text-blue-400" />, bar: 60 },
+                  { label: "Daily Streak", value: "7 Days", icon: <Flame className="w-4 h-4 text-orange-400" />, bar: 100 },
                 ].map((s, i) => (
                   <div key={i}>
                     <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 text-sm text-white/60">{s.icon}{s.label}</div>
-                      <span className="text-sm font-bold text-white">{s.value}</span>
+                      <div className="flex items-center gap-2 text-xs text-white/60 font-medium">{s.icon}{s.label}</div>
+                      <span className="text-xs font-bold text-white font-mono">{s.value}</span>
                     </div>
                     <ProgressBar value={s.bar} color={i === 0 ? "purple" : i === 1 ? "orange" : i === 2 ? "cyan" : "green"} />
                   </div>
@@ -1269,7 +2139,7 @@ function ProfilePage() {
 
             {/* Novel progress */}
             <GlassCard className="p-5">
-              <h3 className="font-semibold text-white mb-3 flex items-center gap-2">
+              <h3 className="font-semibold text-white mb-3 flex items-center gap-2 text-xs font-mono uppercase tracking-wider">
                 <Play className="w-4 h-4 text-violet-400" />Visual Novel Progress
               </h3>
               {["Prologue", "Chapter 1", "Chapter 2"].map((ch, i) => (
@@ -1289,17 +2159,17 @@ function ProfilePage() {
             {/* Achievements */}
             <GlassCard className="p-6">
               <div className="flex items-center justify-between mb-5">
-                <h3 className="font-semibold text-white flex items-center gap-2">
+                <h3 className="font-semibold text-white flex items-center gap-2 text-sm font-mono uppercase tracking-wider">
                   <Award className="w-5 h-5 text-yellow-400" />Achievements
                 </h3>
-                <span className="text-sm text-white/40">{ACHIEVEMENTS.filter(a => a.earned).length}/{ACHIEVEMENTS.length} earned</span>
+                <span className="text-xs text-white/40 font-mono">{dynamicAchievements.filter(a => a.earned).length}/{dynamicAchievements.length} earned</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {ACHIEVEMENTS.map(a => (
+                {dynamicAchievements.map(a => (
                   <div
                     key={a.id}
                     className={`p-3 rounded-xl border text-center transition-all ${
-                      a.earned ? rarityColors[a.rarity] : "bg-white/[0.02] border-white/5 opacity-40 grayscale"
+                      a.earned ? rarityColors[a.rarity] : "bg-white/[0.02] border-white/5 opacity-45 grayscale"
                     }`}
                   >
                     <div className="text-3xl mb-2">{a.icon}</div>
@@ -1315,18 +2185,18 @@ function ProfilePage() {
 
             {/* Recent activity */}
             <GlassCard className="p-6">
-              <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-white mb-4 flex items-center gap-2 text-sm font-mono uppercase tracking-wider">
                 <TrendingUp className="w-5 h-5 text-cyan-400" />Recent Activity
               </h3>
               <div className="space-y-3">
                 {[
-                  { action: "Completed", item: "Your First Hackathon", type: "resource", xp: 300, time: "2h ago", icon: "✅" },
-                  { action: "Earned", item: "Story Seeker achievement", type: "achievement", xp: 150, time: "1d ago", icon: "⭐" },
-                  { action: "Registered for", item: "HackMIT 2025", type: "hackathon", xp: 50, time: "2d ago", icon: "🏆" },
+                  { action: "Completed", item: "Python Variables & Loops", type: "resource", xp: 150, time: "2h ago", icon: "✅" },
+                  { action: "Earned", item: "First Commit achievement", type: "achievement", xp: 150, time: "1d ago", icon: "⭐" },
+                  { action: "Registered for", item: "HackMIT 2026", type: "hackathon", xp: 100, time: "2d ago", icon: "🏆" },
                   { action: "Completed", item: "Team Communication", type: "resource", xp: 200, time: "3d ago", icon: "✅" },
                   { action: "Completed", item: "Chapter 1 of Visual Novel", type: "novel", xp: 250, time: "4d ago", icon: "📖" },
                 ].map((a, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-white/5 last:border-0">
+                  <div key={i} className="flex items-center gap-3 py-2.5 border-b border-white/5 last:border-0">
                     <span className="text-xl">{a.icon}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-white/70 truncate">
@@ -1342,18 +2212,18 @@ function ProfilePage() {
 
             {/* Bookmarks */}
             <GlassCard className="p-6">
-              <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-                <Bookmark className="w-5 h-5 text-violet-400" />Bookmarked Resources
+              <h3 className="font-semibold text-white mb-4 flex items-center gap-2 text-sm font-mono uppercase tracking-wider">
+                <Bookmark className="w-5 h-5 text-violet-400" />Active Resource Tracks
               </h3>
               <div className="grid sm:grid-cols-2 gap-3">
-                {RESOURCES.filter((_, i) => [1, 3, 6, 8].includes(i)).map(r => (
+                {resourcesList.slice(0, 4).map(r => (
                   <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
                     <div className="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center text-violet-400 shrink-0">
                       {r.icon}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-white truncate">{r.title}</p>
-                      <p className="text-xs text-white/40">{r.duration}</p>
+                      <p className="text-xs text-white/40 font-mono">Progress: {r.progress}%</p>
                     </div>
                   </div>
                 ))}
@@ -1368,13 +2238,207 @@ function ProfilePage() {
 
 // ─── Blog Page ────────────────────────────────────────────────────────────────
 
-function BlogPage() {
+function BlogPage({
+  selectedPostId,
+  setSelectedPostId,
+  blogLikes,
+  setBlogLikes,
+  blogComments,
+  setBlogComments
+}: {
+  selectedPostId: number | null;
+  setSelectedPostId: (id: number | null) => void;
+  blogLikes: Record<number, number>;
+  setBlogLikes: React.Dispatch<React.SetStateAction<Record<number, number>>>;
+  blogComments: Record<number, { author: string; text: string; date: string }[]>;
+  setBlogComments: React.Dispatch<React.SetStateAction<Record<number, { author: string; text: string; date: string }[]>>>;
+}) {
   const [activeCategory, setActiveCategory] = useState("All");
+  const [copied, setCopied] = useState(false);
+  
+  // Comment Form States
+  const [cmtName, setCmtName] = useState("");
+  const [cmtText, setCmtText] = useState("");
+
   const categories = ["All", "Tutorial", "Tips", "Success Story", "Guide"];
   const featured = BLOG_POSTS[0];
   const rest = BLOG_POSTS.slice(1).filter(p =>
     activeCategory === "All" || p.category === activeCategory
   );
+
+  const handleLike = (id: number) => {
+    setBlogLikes(prev => {
+      const originalLikes = BLOG_POSTS.find(p => p.id === id)?.likes || 0;
+      const current = prev[id] !== undefined ? prev[id] : originalLikes;
+      return {
+        ...prev,
+        [id]: current + 1
+      };
+    });
+  };
+
+  const handleShare = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCommentSubmit = (id: number) => {
+    if (!cmtName.trim() || !cmtText.trim()) return;
+    const newComment = {
+      author: cmtName,
+      text: cmtText,
+      date: "Just Now"
+    };
+    setBlogComments(prev => ({
+      ...prev,
+      [id]: [newComment, ...(prev[id] || [])]
+    }));
+    setCmtName("");
+    setCmtText("");
+  };
+
+  const selectedPost = BLOG_POSTS.find(p => p.id === selectedPostId);
+
+  // Render Blog Reading View
+  if (selectedPostId && selectedPost) {
+    const likes = blogLikes[selectedPost.id] !== undefined ? blogLikes[selectedPost.id] : selectedPost.likes;
+    const comments = blogComments[selectedPost.id] || [
+      { author: "HackerOne", text: "This article is literally what got me through my first weekend sprint!", date: "2 days ago" },
+      { author: "DevAria", text: "Classic tips. Keep scopes hyper-focused. Win first, refactor later.", date: "4 days ago" }
+    ];
+
+    // Build unique rich text based on the blog selected
+    let bodySections = [
+      { h: "The Problem", p: "We wanted to build a revolutionary AI productivity assistant. By 2:00 AM, nothing compiled. Everything was broken." },
+      { h: "The Pivot", p: "We threw out 90% of the features. We scoped a simple SMS-based empty room searcher. It was 50 lines of script. It ran flawlessly." },
+      { h: "Key Lessons", p: "Never be afraid to pivot. Judges reward a clean, beautiful, fully working demo over a massive broken tech-stack." }
+    ];
+
+    if (selectedPost.id === 2) {
+      bodySections = [
+        { h: "Branching Out", p: "Branches are parallel timelines. The 'main' branch is production. Always spin off a feature branch when editing code." },
+        { h: "Atomic Commits", p: "Keep commits short and specific. Write descriptive commit messages like 'feat: add registration form' rather than 'fix' or 'stuff'." },
+        { h: "Pull Requests", p: "Use pull requests to review your team's code. This prevents broken builds and keeps everyone aligned." }
+      ];
+    } else if (selectedPost.id === 3) {
+      bodySections = [
+        { h: "1. The Last Mile Crisis Aid", p: "Build solutions for immediate problems. Extreme local assistance or food distribution tools win hearts." },
+        { h: "2. Visual Storytellers", p: "Gamified learning platforms or interactive novels always stand out from generic database tables." },
+        { h: "3. GreenProof Analytics", p: "Real-time ecological trackers or verifiable household carbon estimators." }
+      ];
+    }
+
+    return (
+      <div className="pt-24 pb-16 max-w-4xl mx-auto px-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          {/* Back button */}
+          <button
+            onClick={() => setSelectedPostId(null)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 transition-colors self-start text-xs font-semibold"
+          >
+            <ChevronLeft className="w-4 h-4" /> Back to Blogs
+          </button>
+
+          {/* Banner image */}
+          <div className="relative h-64 sm:h-96 rounded-3xl overflow-hidden border border-white/10">
+            <img src={selectedPost.image} alt={selectedPost.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+            <div className="absolute bottom-6 left-6 right-6">
+              <Badge text={selectedPost.category} color="purple" />
+              <h1 className="text-2xl sm:text-4xl font-black text-white mt-3 leading-tight">{selectedPost.title}</h1>
+            </div>
+          </div>
+
+          {/* Author bar */}
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 py-4 border-y border-white/5 text-xs text-white/50">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-blue-500" />
+              <div>
+                <p className="font-bold text-white/80">{selectedPost.author}</p>
+                <p className="opacity-60">{selectedPost.date} · {selectedPost.readTime}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleLike(selectedPost.id)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-pink-500/10 border border-pink-500/30 text-pink-300 hover:bg-pink-500/20 transition-colors"
+              >
+                <Heart className="w-4 h-4 fill-pink-400 text-pink-400" />
+                <span>{likes}</span>
+              </button>
+
+              <button
+                onClick={handleShare}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+              >
+                <Globe className="w-4 h-4" />
+                <span>{copied ? "Link Copied!" : "Share"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Post Body content */}
+          <div className="py-4 space-y-6 font-sans leading-relaxed text-white/80 text-sm sm:text-base">
+            <p className="text-lg text-white/90 font-medium font-serif italic">"{selectedPost.excerpt}"</p>
+
+            {bodySections.map((sec, i) => (
+              <div key={i} className="space-y-2">
+                <h3 className="text-lg font-bold text-white font-mono mt-6">{sec.h}</h3>
+                <p>{sec.p}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Comments section */}
+          <div className="border-t border-white/5 pt-8 space-y-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-violet-400" /> Comments Board ({comments.length})
+            </h3>
+
+            {/* Submit Comment Form */}
+            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-3">
+              <h4 className="text-xs font-bold text-white/75 font-mono uppercase">Leave a Reply</h4>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={cmtName}
+                  onChange={e => setCmtName(e.target.value)}
+                  placeholder="Your Name"
+                  className="bg-[#08080f] border border-white/10 px-3 py-2 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500"
+                />
+              </div>
+              <textarea
+                value={cmtText}
+                onChange={e => setCmtText(e.target.value)}
+                placeholder="Write your comment here..."
+                className="w-full bg-[#08080f] border border-white/10 px-3 py-2 rounded-lg text-xs text-white focus:outline-none focus:border-violet-500 h-20 resize-none"
+              />
+              <button
+                onClick={() => handleCommentSubmit(selectedPost.id)}
+                className="px-5 py-2 rounded-lg bg-violet-600 text-white font-semibold text-xs hover:bg-violet-500 transition-colors"
+              >
+                Post Comment
+              </button>
+            </div>
+
+            {/* Comments List */}
+            <div className="space-y-4">
+              {comments.map((cmt, index) => (
+                <div key={index} className="p-4 rounded-xl bg-white/[0.01] border border-white/5">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-violet-300 font-mono">{cmt.author}</span>
+                    <span className="text-[10px] text-white/30">{cmt.date}</span>
+                  </div>
+                  <p className="text-xs text-white/70">{cmt.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
@@ -1385,7 +2449,10 @@ function BlogPage() {
         </div>
 
         {/* Featured post */}
-        <div className="rounded-3xl overflow-hidden border border-white/10 mb-10 group cursor-pointer">
+        <div
+          onClick={() => setSelectedPostId(featured.id)}
+          className="rounded-3xl overflow-hidden border border-white/10 mb-10 group cursor-pointer"
+        >
           <div className="relative h-64 sm:h-80">
             <img src={featured.image} alt={featured.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#080810] via-[#080810]/60 to-transparent" />
@@ -1394,13 +2461,16 @@ function BlogPage() {
                 <Badge text="Featured" color="orange" />
                 <Badge text={featured.category} color="purple" />
               </div>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 max-w-2xl leading-tight">{featured.title}</h2>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 max-w-2xl leading-tight group-hover:text-violet-300 transition-colors">{featured.title}</h2>
               <p className="text-white/60 text-sm max-w-xl mb-3 line-clamp-2">{featured.excerpt}</p>
               <div className="flex items-center gap-4 text-sm text-white/40">
                 <span>{featured.author}</span>
                 <span>{featured.date}</span>
                 <span>{featured.readTime}</span>
-                <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-pink-400" />{featured.likes}</span>
+                <span className="flex items-center gap-1">
+                  <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400" />
+                  {blogLikes[featured.id] !== undefined ? blogLikes[featured.id] : featured.likes}
+                </span>
               </div>
             </div>
           </div>
@@ -1431,6 +2501,7 @@ function BlogPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.08 }}
+              onClick={() => setSelectedPostId(post.id)}
               className="group rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:shadow-violet-500/5"
             >
               <div className="h-44 overflow-hidden bg-violet-900/20">
@@ -1441,7 +2512,7 @@ function BlogPage() {
                   <Badge text={post.category} color="purple" />
                   <span className="text-xs text-white/30">{post.readTime}</span>
                 </div>
-                <h3 className="font-bold text-white mb-2 leading-snug">{post.title}</h3>
+                <h3 className="font-bold text-white mb-2 leading-snug group-hover:text-violet-300 transition-colors">{post.title}</h3>
                 <p className="text-sm text-white/40 line-clamp-2 mb-4 leading-relaxed">{post.excerpt}</p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1449,8 +2520,8 @@ function BlogPage() {
                     <span className="text-xs text-white/50">{post.author}</span>
                   </div>
                   <div className="flex items-center gap-1 text-white/30 text-xs">
-                    <Heart className="w-3.5 h-3.5 text-pink-400" />
-                    {post.likes}
+                    <Heart className="w-3.5 h-3.5 text-pink-400 fill-pink-400" />
+                    {blogLikes[post.id] !== undefined ? blogLikes[post.id] : post.likes}
                   </div>
                 </div>
               </div>
@@ -2072,6 +3143,35 @@ function MiniGamesPage() {
 export default function App() {
   const [page, setPage] = useState<Page>("home");
 
+  // Root state management for dynamic synchronization
+  const [level, setLevel] = useState(3);
+  const [xp, setXp] = useState(750);
+  const [resourcesList, setResourcesList] = useState<Resource[]>(RESOURCES);
+  const [registered, setRegistered] = useState<Set<number>>(new Set([1]));
+  const [selectedHackathonId, setSelectedHackathonId] = useState<number | null>(null);
+  const [selectedResourceId, setSelectedResourceId] = useState<number | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+
+  const [registrationDetails, setRegistrationDetails] = useState<Record<number, { role: string; portfolio: string; track: string }>>({});
+  const [hackathonTeams, setHackathonTeams] = useState<Record<number, { id: number; name: string; track: string; size: number; capacity: number; description: string; creator: string; applied?: boolean }[]>>({});
+
+  const [blogLikes, setBlogLikes] = useState<Record<number, number>>({});
+  const [blogComments, setBlogComments] = useState<Record<number, { author: string; text: string; date: string }[]>>({});
+
+  const xpToNext = level * 1000;
+
+  const gainXp = (amount: number) => {
+    setXp(prev => {
+      const total = prev + amount;
+      const target = level * 1000;
+      if (total >= target) {
+        setLevel(l => l + 1);
+        return total - target;
+      }
+      return total;
+    });
+  };
+
   useEffect(() => {
     document.documentElement.classList.add("dark");
     document.body.style.fontFamily = "'Plus Jakarta Sans', system-ui, sans-serif";
@@ -2085,11 +3185,55 @@ export default function App() {
       <Navbar currentPage={page} setPage={setPage} />
 
       <main className="relative z-10">
-        {page === "home" && <HomePage setPage={setPage} />}
-        {page === "resources" && <ResourcesPage />}
-        {page === "hackathons" && <HackathonsPage />}
-        {page === "profile" && <ProfilePage />}
-        {page === "blog" && <BlogPage />}
+        {page === "home" && (
+          <HomePage
+            setPage={setPage}
+            setSelectedPostId={setSelectedPostId}
+          />
+        )}
+        {page === "resources" && (
+          <ResourcesPage
+            resourcesList={resourcesList}
+            setResourcesList={setResourcesList}
+            selectedResourceId={selectedResourceId}
+            setSelectedResourceId={setSelectedResourceId}
+            gainXp={gainXp}
+            xp={xp}
+            level={level}
+          />
+        )}
+        {page === "hackathons" && (
+          <HackathonsPage
+            registered={registered}
+            setRegistered={setRegistered}
+            selectedHackathonId={selectedHackathonId}
+            setSelectedHackathonId={setSelectedHackathonId}
+            registrationDetails={registrationDetails}
+            setRegistrationDetails={setRegistrationDetails}
+            hackathonTeams={hackathonTeams}
+            setHackathonTeams={setHackathonTeams}
+            gainXp={gainXp}
+          />
+        )}
+        {page === "profile" && (
+          <ProfilePage
+            level={level}
+            xp={xp}
+            xpToNext={xpToNext}
+            resourcesList={resourcesList}
+            registered={registered}
+          />
+        )}
+        {page === "blog" && (
+          <BlogPage
+            selectedPostId={selectedPostId}
+            setSelectedPostId={setSelectedPostId}
+            blogLikes={blogLikes}
+            setBlogLikes={setBlogLikes}
+            blogComments={blogComments}
+            setBlogComments={setBlogComments}
+          />
+        )}
         {page === "novel" && <VisualNovelPage />}
         {page === "games" && <MiniGamesPage />}
       </main>
