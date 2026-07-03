@@ -615,7 +615,19 @@ const NAV_ITEMS: { label: string; page: Page; icon: ReactNode }[] = [
   { label: "Mini-Games", page: "games", icon: <Gamepad2 className="w-4 h-4" /> },
 ];
 
-function Navbar({ currentPage, setPage }: { currentPage: Page; setPage: (p: Page) => void }) {
+function Navbar({
+  currentPage,
+  setPage,
+  isLoggedIn,
+  setIsLoggedIn,
+  onOpenLogin
+}: {
+  currentPage: Page;
+  setPage: (p: Page) => void;
+  isLoggedIn: boolean;
+  setIsLoggedIn: (val: boolean) => void;
+  onOpenLogin: () => void;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -690,14 +702,46 @@ function Navbar({ currentPage, setPage }: { currentPage: Page; setPage: (p: Page
               )}
             </div>
 
-            {/* Profile */}
-            <button
-              onClick={() => setPage("profile")}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-            >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 flex items-center justify-center text-xs font-bold">A</div>
-              <span className="hidden sm:block text-sm font-medium text-white/80">Alex</span>
-            </button>
+            {/* Profile / Sign In */}
+            {isLoggedIn ? (
+              <div className="relative group">
+                <button
+                  onClick={() => setPage("profile")}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-[#121222] transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-400 to-blue-500 flex items-center justify-center text-xs font-bold text-white">A</div>
+                  <span className="hidden sm:block text-sm font-medium text-white/80">Alex</span>
+                </button>
+                {/* Dropdown Menu on hover/focus */}
+                <div className="absolute right-0 top-full pt-1.5 w-36 hidden group-hover:block hover:block z-50">
+                  <div className="bg-[#0f0f1a]/95 border border-white/10 rounded-xl shadow-2xl overflow-hidden backdrop-blur-md">
+                    <button
+                      onClick={() => setPage("profile")}
+                      className="w-full text-left px-3.5 py-2 text-xs text-white/70 hover:bg-white/5 hover:text-white transition-colors"
+                    >
+                      View Profile
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsLoggedIn(false);
+                        setPage("home");
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors border-t border-white/5"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onOpenLogin}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-semibold text-xs transition-all shadow-md shadow-violet-500/15 hover:-translate-y-0.5"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
 
             {/* Mobile menu */}
             <button
@@ -1320,7 +1364,9 @@ function ResourcesPage({
   setSelectedResourceId,
   gainXp,
   xp,
-  level
+  level,
+  isLoggedIn,
+  onOpenLogin
 }: {
   resourcesList: Resource[];
   setResourcesList: React.Dispatch<React.SetStateAction<Resource[]>>;
@@ -1329,6 +1375,8 @@ function ResourcesPage({
   gainXp: (amount: number) => void;
   xp: number;
   level: number;
+  isLoggedIn: boolean;
+  onOpenLogin: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -1381,6 +1429,24 @@ function ResourcesPage({
           <h1 className="text-4xl font-extrabold mb-2"><GradientText>Learning Resources</GradientText></h1>
           <p className="text-white/50">Everything you need to go from beginner to hackathon-ready.</p>
         </div>
+
+        {!isLoggedIn && (
+          <div className="mb-6 p-4 rounded-2xl bg-violet-950/20 border border-violet-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-violet-400 shrink-0 animate-pulse" />
+              <div>
+                <p className="text-sm font-bold text-white">Guest Mode Active</p>
+                <p className="text-xs text-white/50">Sign in to save your progression, gain experience points, and unlock advanced modules!</p>
+              </div>
+            </div>
+            <button
+              onClick={onOpenLogin}
+              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs whitespace-nowrap transition-colors"
+            >
+              Sign In Now
+            </button>
+          </div>
+        )}
 
         {/* Progress summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -1560,7 +1626,9 @@ function HackathonsPage({
   setRegistrationDetails,
   hackathonTeams,
   setHackathonTeams,
-  gainXp
+  gainXp,
+  isLoggedIn,
+  onOpenLogin
 }: {
   registered: Set<number>;
   setRegistered: React.Dispatch<React.SetStateAction<Set<number>>>;
@@ -1571,6 +1639,8 @@ function HackathonsPage({
   hackathonTeams: Record<number, { id: number; name: string; track: string; size: number; capacity: number; description: string; creator: string; applied?: boolean }[]>;
   setHackathonTeams: React.Dispatch<React.SetStateAction<Record<number, { id: number; name: string; track: string; size: number; capacity: number; description: string; creator: string; applied?: boolean }[]>>>;
   gainXp: (amount: number) => void;
+  isLoggedIn: boolean;
+  onOpenLogin: () => void;
 }) {
   const [filter, setFilter] = useState<"all" | "online" | "in-person" | "hybrid">("all");
   const [diffFilter, setDiffFilter] = useState<"All" | "Beginner" | "Intermediate" | "Advanced">("All");
@@ -1847,7 +1917,23 @@ function HackathonsPage({
 
           {/* Right Action / Ticket Column */}
           <div className="lg:col-span-5 space-y-6">
-            {isReg ? (
+            {!isLoggedIn ? (
+              <div className="space-y-4">
+                <GlassCard className="p-6 text-center" glowColor="none">
+                  <Lock className="w-8 h-8 text-white/30 mx-auto mb-2" />
+                  <h3 className="text-lg font-bold text-white mb-1">Sign In Required</h3>
+                  <p className="text-xs text-white/50 mb-5 leading-relaxed">
+                    You must be logged in to your Challenger account to register for events, claim holographic tickets, and join team boards.
+                  </p>
+                  <button
+                    onClick={onOpenLogin}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/20"
+                  >
+                    Log In to Register
+                  </button>
+                </GlassCard>
+              </div>
+            ) : isReg ? (
               <div className="space-y-4">
                 <h3 className="text-xs font-mono tracking-widest text-white/40 uppercase">Your Admission Pass</h3>
                 <CyberTicket hackathon={selectedHackathon} />
@@ -2058,13 +2144,17 @@ function ProfilePage({
   xp,
   xpToNext,
   resourcesList,
-  registered
+  registered,
+  isLoggedIn,
+  onOpenLogin
 }: {
   level: number;
   xp: number;
   xpToNext: number;
   resourcesList: Resource[];
   registered: Set<number>;
+  isLoggedIn: boolean;
+  onOpenLogin: () => void;
 }) {
   const rarityColors: Record<string, string> = {
     common: "text-white/60 border-white/20 bg-white/5",
@@ -2086,6 +2176,55 @@ function ProfilePage({
     if (a.id === 4 && completedLessonsCount >= 3) earned = true;
     return { ...a, earned };
   });
+
+  if (!isLoggedIn) {
+    return (
+      <div className="pt-24 pb-16 max-w-md mx-auto px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
+          <GlassCard className="p-8 border-white/10" glowColor="purple">
+            <Lock className="w-12 h-12 text-violet-400 mb-4 mx-auto animate-bounce" />
+            <h2 className="text-2xl font-black text-white tracking-tight mb-2">Challenger Profile Locked</h2>
+            <p className="text-sm text-white/50 mb-6 leading-relaxed">
+              Create an account or sign in to build your programmer profile, track lesson progress, register for hackathons, and earn achievements!
+            </p>
+
+            <div className="space-y-3.5 text-left bg-white/[0.02] border border-white/5 rounded-2xl p-4 mb-6">
+              <h4 className="text-[10px] font-bold font-mono text-violet-300 uppercase tracking-widest mb-2">Unlocked with Account:</h4>
+              <div className="space-y-2 text-xs text-white/70">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Persistent XP & Level progression</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                  <span>Personalized Hackathon Passports</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Award className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                  <span>Claimable visual-novel achievements</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Flame className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span>Streak tracking & weekly leaderboard</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={onOpenLogin}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/20"
+            >
+              Sign In to Unlock Profile
+            </button>
+          </GlassCard>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="pt-24 pb-16 max-w-6xl mx-auto px-6">
@@ -3138,10 +3277,199 @@ function MiniGamesPage() {
   );
 }
 
+// ─── Login Modal ──────────────────────────────────────────────────────────────
+
+function LoginModal({
+  isOpen,
+  onClose,
+  onLoginSuccess
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onLoginSuccess: () => void;
+}) {
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState("");
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    triggerSimulatedLogin();
+  };
+
+  const triggerSimulatedLogin = () => {
+    setLoading(true);
+    const steps = [
+      "Establishing handshake...",
+      "Syncing with SoloQueue DB...",
+      "Decrypting user token...",
+      "Welcome, Challenger!"
+    ];
+
+    let delay = 0;
+    steps.forEach((step, index) => {
+      setTimeout(() => {
+        setLoadingStep(step);
+        if (index === steps.length - 1) {
+          setTimeout(() => {
+            onLoginSuccess();
+            setLoading(false);
+            setLoadingStep("");
+            onClose();
+          }, 400);
+        }
+      }, delay);
+      delay += 450;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={onClose} />
+
+      {/* Modal Container */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c16]/95 p-6 shadow-2xl backdrop-blur-xl z-10"
+      >
+        {/* Glow Effects */}
+        <div className="absolute -top-12 -left-12 w-32 h-32 bg-violet-500/20 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
+
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-white/50 hover:text-white transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <RefreshCw className="w-10 h-10 text-violet-400 animate-spin mb-5" />
+            <h3 className="text-sm font-bold text-white mb-2">Simulating Authentication</h3>
+            <p className="text-[11px] font-mono text-violet-300 animate-pulse">{loadingStep}</p>
+          </div>
+        ) : (
+          <div>
+            <div className="text-center mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-blue-600 flex items-center justify-center shadow-lg shadow-violet-500/30 mx-auto mb-2.5">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-xl font-black text-white tracking-tight">
+                {isSignUp ? "Create Account" : "Access HQ"}
+              </h2>
+              <p className="text-[11px] text-white/40 mt-1">
+                {isSignUp ? "Sign up to track your hackathon sprints" : "Login to resume your training sessions"}
+              </p>
+            </div>
+
+            {/* Google Sign In (Simulated) */}
+            <button
+              type="button"
+              onClick={triggerSimulatedLogin}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white font-medium text-xs sm:text-sm transition-all mb-3.5"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+              </svg>
+              <span>Continue with Google</span>
+            </button>
+
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/5" />
+              </div>
+              <div className="relative flex justify-center text-[9px] uppercase font-mono tracking-widest text-white/30 bg-transparent">
+                <span className="px-2 bg-[#0c0c16]">Or use credentials</span>
+              </div>
+            </div>
+
+            {/* Email form */}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {isSignUp && (
+                <div>
+                  <label className="text-[9px] text-white/40 font-mono uppercase block mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Alex Kim"
+                    className="w-full bg-white/[0.02] border border-white/10 px-3 py-2 rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="text-[9px] text-white/40 font-mono uppercase block mb-1">Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="alex@soloqueue.academy"
+                  className="w-full bg-white/[0.02] border border-white/10 px-3 py-2 rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-white/40 font-mono uppercase block mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/[0.02] border border-white/10 px-3 py-2 rounded-xl text-xs text-white focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider transition-colors mt-2"
+              >
+                {isSignUp ? "Sign Up as Alex" : "Log In as Alex"}
+              </button>
+            </form>
+
+            {/* Banner info */}
+            <div className="mt-3.5 p-2.5 rounded-xl bg-violet-950/20 border border-violet-500/10 text-[9px] text-white/40 text-center font-mono leading-relaxed">
+              💡 Demo Mode: Enter any email or click Google to instantly load Alex Kim's profile.
+            </div>
+
+            {/* Toggle Sign In / Sign Up */}
+            <p className="text-center text-xs text-white/40 mt-4">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-violet-400 hover:text-violet-300 font-semibold"
+              >
+                {isSignUp ? "Log In" : "Sign Up"}
+              </button>
+            </p>
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [page, setPage] = useState<Page>("home");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Root state management for dynamic synchronization
   const [level, setLevel] = useState(3);
@@ -3182,7 +3510,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden relative">
       <AmbientBackground />
-      <Navbar currentPage={page} setPage={setPage} />
+      <Navbar
+        currentPage={page}
+        setPage={setPage}
+        isLoggedIn={isLoggedIn}
+        setIsLoggedIn={setIsLoggedIn}
+        onOpenLogin={() => setShowLoginModal(true)}
+      />
 
       <main className="relative z-10">
         {page === "home" && (
@@ -3200,6 +3534,8 @@ export default function App() {
             gainXp={gainXp}
             xp={xp}
             level={level}
+            isLoggedIn={isLoggedIn}
+            onOpenLogin={() => setShowLoginModal(true)}
           />
         )}
         {page === "hackathons" && (
@@ -3213,6 +3549,8 @@ export default function App() {
             hackathonTeams={hackathonTeams}
             setHackathonTeams={setHackathonTeams}
             gainXp={gainXp}
+            isLoggedIn={isLoggedIn}
+            onOpenLogin={() => setShowLoginModal(true)}
           />
         )}
         {page === "profile" && (
@@ -3222,6 +3560,8 @@ export default function App() {
             xpToNext={xpToNext}
             resourcesList={resourcesList}
             registered={registered}
+            isLoggedIn={isLoggedIn}
+            onOpenLogin={() => setShowLoginModal(true)}
           />
         )}
         {page === "blog" && (
@@ -3256,6 +3596,14 @@ export default function App() {
             ))}
           </div>
         </div>
+      )}
+
+      {showLoginModal && (
+        <LoginModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          onLoginSuccess={() => setIsLoggedIn(true)}
+        />
       )}
     </div>
   );
