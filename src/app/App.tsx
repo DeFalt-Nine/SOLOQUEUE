@@ -666,10 +666,12 @@ function Navbar({
           {/* Right side */}
           <div className="flex items-center gap-2">
             {/* XP badge */}
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25">
-              <Flame className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-xs font-bold text-violet-300">7 streak</span>
-            </div>
+            {isLoggedIn && (
+              <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25">
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                <span className="text-xs font-bold text-violet-300">7 streak</span>
+              </div>
+            )}
 
             {/* Notifications */}
             <div className="relative">
@@ -1736,7 +1738,7 @@ function HackathonsPage({
 
   // Render Single Hackathon Detail View
   if (selectedHackathonId && selectedHackathon) {
-    const isReg = registered.has(selectedHackathon.id);
+    const isReg = isLoggedIn && registered.has(selectedHackathon.id);
     const regInfo = registrationDetails[selectedHackathon.id];
     const teams = hackathonTeams[selectedHackathon.id] || [];
 
@@ -1962,10 +1964,10 @@ function HackathonsPage({
             ) : (
               <div className="space-y-4">
                 <GlassCard className="p-6 text-center" glowColor="none">
-                  <Lock className="w-8 h-8 text-white/30 mx-auto mb-2" />
-                  <h3 className="text-lg font-bold text-white mb-1">Registration Pending</h3>
+                  <Sparkles className="w-8 h-8 text-violet-400 mx-auto mb-2 animate-pulse" />
+                  <h3 className="text-lg font-bold text-white mb-1">Ready to Register?</h3>
                   <p className="text-xs text-white/50 mb-5 leading-relaxed">
-                    Complete the basic application profile to secure your seat and download your holographic ticket pass.
+                    Select your track and team role to secure your seat and download your holographic ticket pass.
                   </p>
 
                   {!showRegForm ? (
@@ -1973,7 +1975,7 @@ function HackathonsPage({
                       onClick={() => setShowRegForm(true)}
                       className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-violet-500/20"
                     >
-                      Open Registration Form
+                      Fill Out Registration Form
                     </button>
                   ) : (
                     <motion.div
@@ -2088,7 +2090,7 @@ function HackathonsPage({
                   <Badge text={h.difficulty} color={diffColors[h.difficulty]} />
                   <Badge text={h.type} color={typeColors[h.type]} />
                 </div>
-                {registered.has(h.id) && (
+                {isLoggedIn && registered.has(h.id) && (
                   <div className="flex items-center gap-1 text-xs text-emerald-400 font-semibold">
                     <Check className="w-3 h-3" />Registered
                   </div>
@@ -2122,12 +2124,12 @@ function HackathonsPage({
 
               <button
                 className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-all ${
-                  registered.has(h.id)
+                  (isLoggedIn && registered.has(h.id))
                     ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                     : "bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white shadow-md shadow-violet-500/20"
                 }`}
               >
-                {registered.has(h.id) ? "✓ Ticket Claimed — Open Pass" : "View Details & Register"}
+                {(isLoggedIn && registered.has(h.id)) ? "✓ Ticket Claimed — Open Pass" : "View Details & Register"}
               </button>
             </motion.div>
           ))}
@@ -3475,7 +3477,7 @@ export default function App() {
   const [level, setLevel] = useState(3);
   const [xp, setXp] = useState(750);
   const [resourcesList, setResourcesList] = useState<Resource[]>(RESOURCES);
-  const [registered, setRegistered] = useState<Set<number>>(new Set([1]));
+  const [registered, setRegistered] = useState<Set<number>>(new Set<number>());
   const [selectedHackathonId, setSelectedHackathonId] = useState<number | null>(null);
   const [selectedResourceId, setSelectedResourceId] = useState<number | null>(null);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
